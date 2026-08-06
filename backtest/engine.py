@@ -35,6 +35,17 @@ Share counts are locked in at entry and held fixed until exit (not
 continuously re-targeted to notional every day, which would trade every
 single day purely to chase a moving target and is not how pairs trading
 works in practice).
+
+Risk layer (risk/): every new entry's notional is clipped by
+risk.limits.clip_new_pair_notional (a per-pair cap, then whatever gross
+exposure budget remains once already-open positions are counted, both as a
+fraction of *current* equity) before it becomes an order. Stop-loss on
+spread divergence is signals.spread.generate_signals's own
+stop_loss_threshold, already wired in via _compute_pair_series. A portfolio-
+level risk.kill_switch.KillSwitch checks equity every bar; once triggered
+(sticky, no auto-resume) every open position is flattened and no further
+selection or signal processing happens for the rest of the run, the same
+manual-reset-only design used across this portfolio's other backtesters.
 """
 
 from __future__ import annotations
@@ -48,6 +59,8 @@ from config.universe import SECTOR_TICKERS, UNIVERSE
 from data.prices import load_prices, to_price_panel
 from monitor.structural_break import cusum_detect, monitor_pair_status, rolling_cointegration_pvalue
 from pairs.cointegration import test_sector_pairs
+from risk.kill_switch import KillSwitch
+from risk.limits import clip_new_pair_notional
 from signals.hedge_ratio import kalman_hedge_ratio_series, static_hedge_ratio_series
 from signals.spread import generate_signals, pair_spread, rolling_zscore
 
@@ -143,6 +156,9 @@ def _run_backtest_on_panel(
     cost_bps: float = 5.0,
     starting_cash: float = 1_000_000.0,
     notional_per_pair: float | None = None,
+    max_notional_per_pair_fraction: float = 0.5,
+    max_gross_exposure_fraction: float = 1.0,
+    kill_switch_drawdown: float = 0.15,
 ) -> dict:
     trading_dates = close_panel.index[
         (close_panel.index >= pd.Timestamp(start)) & (close_panel.index < pd.Timestamp(end))
@@ -151,6 +167,8 @@ def _run_backtest_on_panel(
     notional_per_pair = notional_per_pair or starting_cash / max_pairs
 
     portfolio = Portfolio(starting_cash)
+    kill_switch = KillSwitch(kill_switch_drawdown)
+    halted = False
     tracked: dict[tuple[str, str], dict] = {}
     trades: list[dict] = []
     open_trade_meta: dict[tuple[str, str], dict] = {}
@@ -162,57 +180,69 @@ def _run_backtest_on_panel(
             refit_dates[cycle_idx + 1] if cycle_idx + 1 < len(refit_dates) else trading_dates[-1]
         )
 
-        selection_panel = close_panel.loc[close_panel.index < refit_date]
-        selection = test_sector_pairs(selection_panel, sector_tickers, fdr_alpha=fdr_alpha)
-        significant = selection[selection["cointegrated"]].sort_values("p_value_fdr")
-        selected_pairs = [
-            (row.ticker_y, row.ticker_x) for row in significant.head(max_pairs).itertuples()
-        ]
+        if not halted:
+            selection_panel = close_panel.loc[close_panel.index < refit_date]
+            selection = test_sector_pairs(selection_panel, sector_tickers, fdr_alpha=fdr_alpha)
+            significant = selection[selection["cointegrated"]].sort_values("p_value_fdr")
+            selected_pairs = [
+                (row.ticker_y, row.ticker_x) for row in significant.head(max_pairs).itertuples()
+            ]
 
-        for pair in list(tracked):
-            if pair not in selected_pairs:
-                shares = tracked[pair]["shares"]
-                y_t, x_t = pair
-                if abs(shares["y"]) > ORDER_EPSILON or abs(shares["x"]) > ORDER_EPSILON:
-                    pending_ticker_orders[y_t] = pending_ticker_orders.get(y_t, 0.0) - shares["y"]
-                    pending_ticker_orders[x_t] = pending_ticker_orders.get(x_t, 0.0) - shares["x"]
-                    meta = open_trade_meta.pop(pair, None)
-                    if meta is not None:
-                        trades.append({**meta, "exit_date": refit_date, "exit_reason": "dropped"})
-                del tracked[pair]
+            for pair in list(tracked):
+                if pair not in selected_pairs:
+                    shares = tracked[pair]["shares"]
+                    y_t, x_t = pair
+                    if abs(shares["y"]) > ORDER_EPSILON or abs(shares["x"]) > ORDER_EPSILON:
+                        pending_ticker_orders[y_t] = (
+                            pending_ticker_orders.get(y_t, 0.0) - shares["y"]
+                        )
+                        pending_ticker_orders[x_t] = (
+                            pending_ticker_orders.get(x_t, 0.0) - shares["x"]
+                        )
+                        meta = open_trade_meta.pop(pair, None)
+                        if meta is not None:
+                            trades.append(
+                                {**meta, "exit_date": refit_date, "exit_reason": "dropped"}
+                            )
+                    del tracked[pair]
 
-        for pair in selected_pairs:
-            ticker_y, ticker_x = pair
-            tenure_start = tracked[pair]["tenure_start"] if pair in tracked else refit_date
-            try:
-                series = _compute_pair_series(
-                    close_panel,
-                    ticker_y,
-                    ticker_x,
-                    tenure_start,
-                    window_end,
-                    hedge_ratio_method,
-                    zscore_window,
-                    entry_threshold,
-                    exit_threshold,
-                    stop_loss_threshold,
-                    rolling_cointegration_window,
-                    rolling_cointegration_step,
-                    cusum_k,
-                    cusum_h,
-                    pvalue_threshold,
-                    requalify_bars,
-                )
-            except ValueError:
-                # Not enough observations yet in this tenure (e.g. a pair
-                # just selected with a short history since its own start).
-                # Skip it this cycle rather than crash the whole backtest;
-                # it can be picked up again at the next refit once it has
-                # enough history, or dropped from `selected_pairs` entirely
-                # if it stops testing significant by then.
-                continue
-            existing_shares = tracked.get(pair, {}).get("shares", {"y": 0.0, "x": 0.0})
-            tracked[pair] = {"tenure_start": tenure_start, "shares": existing_shares, **series}
+            for pair in selected_pairs:
+                ticker_y, ticker_x = pair
+                tenure_start = tracked[pair]["tenure_start"] if pair in tracked else refit_date
+                try:
+                    series = _compute_pair_series(
+                        close_panel,
+                        ticker_y,
+                        ticker_x,
+                        tenure_start,
+                        window_end,
+                        hedge_ratio_method,
+                        zscore_window,
+                        entry_threshold,
+                        exit_threshold,
+                        stop_loss_threshold,
+                        rolling_cointegration_window,
+                        rolling_cointegration_step,
+                        cusum_k,
+                        cusum_h,
+                        pvalue_threshold,
+                        requalify_bars,
+                    )
+                except ValueError:
+                    # Not enough observations yet in this tenure (e.g. a pair
+                    # just selected with a short history since its own start).
+                    # Skip it this cycle rather than crash the whole backtest;
+                    # it can be picked up again at the next refit once it has
+                    # enough history, or dropped from `selected_pairs` entirely
+                    # if it stops testing significant by then.
+                    continue
+                existing = tracked.get(pair, {})
+                tracked[pair] = {
+                    "tenure_start": tenure_start,
+                    "shares": existing.get("shares", {"y": 0.0, "x": 0.0}),
+                    "notional": existing.get("notional", 0.0),
+                    **series,
+                }
 
         cycle_dates = trading_dates[(trading_dates >= refit_date) & (trading_dates < window_end)]
         for date in cycle_dates:
@@ -230,7 +260,14 @@ def _run_backtest_on_panel(
                 pending_ticker_orders = {}
                 pending_pair_shares = {}
 
-            portfolio.mark_to_market(date, close_panel.loc[date].to_dict())
+            equity = portfolio.mark_to_market(date, close_panel.loc[date].to_dict())
+
+            if not halted and kill_switch.check(equity):
+                halted = True
+                pending_ticker_orders = portfolio.flatten_orders()
+                continue
+            if halted:
+                continue
 
             for pair, state in tracked.items():
                 if date not in state["positions"].index:
@@ -248,6 +285,7 @@ def _run_backtest_on_panel(
                 if pos_today == 0:
                     delta_y, delta_x = -state["shares"]["y"], -state["shares"]["x"]
                     new_shares = {"y": 0.0, "x": 0.0}
+                    tracked[pair]["notional"] = 0.0
                     meta = open_trade_meta.pop(pair, None)
                     if meta is not None:
                         z = state["zscore"].loc[date]
@@ -259,11 +297,26 @@ def _run_backtest_on_panel(
                             reason = "stop_loss"
                         trades.append({**meta, "exit_date": date, "exit_reason": reason})
                 elif pd.notna(hedge_ratio_today) and pd.notna(y_price) and y_price != 0:
-                    target_y = pos_today * (notional_per_pair / y_price)
-                    target_x = -pos_today * hedge_ratio_today * (notional_per_pair / y_price)
+                    raw_notional = pos_today * notional_per_pair
+                    existing_notional = {
+                        p: s["notional"] for p, s in tracked.items() if p != pair
+                    }
+                    clipped_notional = clip_new_pair_notional(
+                        raw_notional,
+                        existing_notional,
+                        equity,
+                        max_notional_per_pair_fraction,
+                        max_gross_exposure_fraction,
+                    )
+                    if clipped_notional == 0.0:
+                        continue
+
+                    target_y = clipped_notional / y_price
+                    target_x = -hedge_ratio_today * clipped_notional / y_price
                     delta_y = target_y - state["shares"]["y"]
                     delta_x = target_x - state["shares"]["x"]
                     new_shares = {"y": target_y, "x": target_x}
+                    tracked[pair]["notional"] = clipped_notional
                     open_trade_meta[pair] = {
                         "side": "long" if pos_today == 1 else "short",
                         "entry_date": date,
@@ -289,10 +342,15 @@ def _run_backtest_on_panel(
             axis=1,
         )
 
-    equity = portfolio.equity_series()
-    metrics = backtest_metrics.compute_metrics(equity, trades_df)
+    equity_curve = portfolio.equity_series()
+    metrics = backtest_metrics.compute_metrics(equity_curve, trades_df)
 
-    return {"equity_curve": equity, "trades": trades_df, "metrics": metrics}
+    return {
+        "equity_curve": equity_curve,
+        "trades": trades_df,
+        "metrics": metrics,
+        "kill_switch_triggered": kill_switch.triggered,
+    }
 
 
 def run_backtest(
@@ -320,11 +378,12 @@ def run_backtest(
             max_pairs, hedge_ratio_method, zscore_window, entry/exit/
             stop_loss thresholds, rolling_cointegration_window/step, cusum_k/
             h, pvalue_threshold, requalify_bars, fdr_alpha, cost_bps,
-            starting_cash, notional_per_pair).
+            starting_cash, notional_per_pair, max_notional_per_pair_fraction,
+            max_gross_exposure_fraction, kill_switch_drawdown).
 
     Returns:
-        Dict with "equity_curve" (pd.Series), "trades" (pd.DataFrame), and
-        "metrics" (dict).
+        Dict with "equity_curve" (pd.Series), "trades" (pd.DataFrame),
+        "metrics" (dict), and "kill_switch_triggered" (bool).
     """
     tickers = universe or UNIVERSE
     sectors = sector_tickers or SECTOR_TICKERS

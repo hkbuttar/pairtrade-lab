@@ -98,3 +98,29 @@ def test_run_backtest_metrics_present_and_finite_where_expected():
     metrics = result["metrics"]
     assert metrics["n_trades"] == len(result["trades"])
     assert np.isfinite(metrics["max_drawdown"])
+
+
+def test_kill_switch_reported_untriggered_under_normal_conditions():
+    result = _run()
+
+    assert result["kill_switch_triggered"] is False
+
+
+def test_kill_switch_triggers_and_halts_further_trading():
+    # An extremely tight drawdown threshold combined with a high transaction
+    # cost guarantees the very first entry's fees alone breach it, so the
+    # trigger is deterministic regardless of which way the trade would have
+    # gone.
+    result = _run(kill_switch_drawdown=1e-5, cost_bps=100.0)
+
+    assert result["kill_switch_triggered"] is True
+    equity = result["equity_curve"]
+    # Once halted, nothing further should move equity: the tail of the
+    # curve should be flat.
+    assert equity.iloc[-10:].nunique() == 1
+
+
+def test_zero_notional_limit_suppresses_all_entries():
+    result = _run(max_notional_per_pair_fraction=0.0, max_gross_exposure_fraction=0.0)
+
+    assert result["trades"].empty

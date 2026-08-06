@@ -29,13 +29,22 @@ linear combination than the one actually tested for cointegration). Share
 counts are locked in at entry and held fixed until exit, not continuously
 re-targeted to notional every day.
 
+**Risk layer** (`risk/`): every new pair entry's notional is clipped by
+`risk.limits.clip_new_pair_notional` (a per-pair cap, then whatever gross
+exposure budget remains once already-open positions are counted, both as a
+fraction of *current* equity) before it becomes an order. A portfolio-level
+`risk.kill_switch.KillSwitch` checks equity every bar; once triggered
+(sticky, no auto-resume, manual `reset()` only — the same design shared
+across alpha-signal-lab, bookmaker, and execedge, see `risk/README.md`),
+every open position is flattened and no further selection or signal
+processing happens for the rest of the run. Stop-loss on spread divergence
+is `signals/spread.py`'s own `stop_loss_threshold`, already wired in.
+
 **Not yet included**: baskets (`pairs/johansen.py`) aren't wired into this
 engine — multi-leg fills add real complexity, and the basket search has
-found very few significant baskets to trade anyway. The risk layer
-(`risk/`, kill-switch and position limits) doesn't exist yet either, so
-nothing here stops a losing streak beyond the strategy's own stop-loss and
-monitoring logic. Block bootstrap confidence intervals on the results below
-are `backtest/` future work, not yet built.
+found very few significant baskets to trade anyway. Block bootstrap
+confidence intervals on the results below are `backtest/` future work, not
+yet built.
 
 `run_backtest.py` is the CLI entry point:
 
@@ -69,3 +78,7 @@ excuses for the result:
   under-utilization is itself a consequence of how few pairs survive FDR
   correction and rolling monitoring in this universe (see `pairs/` and
   `monitor/`), not a bug in the engine.
+- The kill-switch never triggered and the notional limits never bound at
+  this scale (see `risk/README.md`): a 6.6% max drawdown is well under the
+  15% default kill-switch threshold. That's the risk layer behaving
+  correctly as a backstop, not evidence it did anything here.

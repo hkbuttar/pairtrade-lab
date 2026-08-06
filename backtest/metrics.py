@@ -7,14 +7,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from risk.kill_switch import running_drawdown
+
 TRADING_DAYS_PER_YEAR = 252
 ZERO_VOL_EPSILON = 1e-9
-
-
-def running_drawdown(equity: pd.Series) -> pd.Series:
-    """Drawdown from the running peak, as a positive fraction, at every point."""
-    running_max = equity.cummax()
-    return (running_max - equity) / running_max
 
 
 def cagr(equity: pd.Series) -> float:

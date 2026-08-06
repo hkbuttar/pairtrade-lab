@@ -35,6 +35,9 @@ def main() -> None:
     parser.add_argument("--fdr-alpha", type=float, default=0.05)
     parser.add_argument("--cost-bps", type=float, default=5.0)
     parser.add_argument("--starting-cash", type=float, default=1_000_000.0)
+    parser.add_argument("--max-notional-per-pair-fraction", type=float, default=0.5)
+    parser.add_argument("--max-gross-exposure-fraction", type=float, default=1.0)
+    parser.add_argument("--kill-switch-drawdown", type=float, default=0.15)
     args = parser.parse_args()
 
     result = run_backtest(
@@ -53,6 +56,9 @@ def main() -> None:
         fdr_alpha=args.fdr_alpha,
         cost_bps=args.cost_bps,
         starting_cash=args.starting_cash,
+        max_notional_per_pair_fraction=args.max_notional_per_pair_fraction,
+        max_gross_exposure_fraction=args.max_gross_exposure_fraction,
+        kill_switch_drawdown=args.kill_switch_drawdown,
     )
 
     print(f"Backtest {args.start} -> {args.end}, refit every {args.refit_every_days}d\n")
@@ -66,6 +72,7 @@ def main() -> None:
 
     for key, value in result["metrics"].items():
         print(f"  {key}: {value:.4f}" if value == value else f"  {key}: nan")
+    print(f"  kill_switch_triggered: {result['kill_switch_triggered']}")
 
 
 if __name__ == "__main__":
