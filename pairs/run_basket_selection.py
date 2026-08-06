@@ -7,9 +7,11 @@ Defaults to 3- and 4-leg baskets only; 5-leg baskets multiply the search
 space considerably (e.g. 13 tickers -> 1287 5-leg combinations in a single
 sector) and are opt-in via --basket-sizes.
 
-Prints every tested basket (winners and rejected baskets alike), ranked by
-FDR-corrected p-value, plus a summary line of how many baskets were tested
-versus how many survived correction, so the search space stays transparent.
+By default prints every tested basket (winners and rejected baskets alike),
+ranked by FDR-corrected p-value, so the search space stays transparent
+rather than only showing survivors. Pass --only-significant to print just
+the baskets that passed correction (the full table, both winners and
+rejects, is still available via --output-csv regardless).
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import pandas as pd
 
 from config.universe import SECTOR_TICKERS, UNIVERSE
 from data.prices import load_prices, to_price_panel
+from pairs.cli_output import add_output_args, report
 from pairs.johansen import test_sector_baskets
 
 
@@ -44,6 +47,7 @@ def main() -> None:
     parser.add_argument("--source", default="yfinance", choices=["yfinance", "alpaca"])
     parser.add_argument("--basket-sizes", type=int, nargs="+", default=[3, 4])
     parser.add_argument("--fdr-alpha", type=float, default=0.05)
+    add_output_args(parser)
     args = parser.parse_args()
 
     table = run(
@@ -53,16 +57,7 @@ def main() -> None:
         basket_sizes=tuple(args.basket_sizes),
         fdr_alpha=args.fdr_alpha,
     )
-
-    with pd.option_context("display.max_rows", None, "display.width", 160):
-        print(table.to_string(index=False))
-
-    n_tested = len(table)
-    n_significant = int(table["cointegrated"].sum()) if n_tested else 0
-    print(
-        f"\n{n_significant} / {n_tested} baskets cointegrated after FDR correction "
-        f"(alpha={args.fdr_alpha})"
-    )
+    report(table, "baskets", args, args.fdr_alpha)
 
 
 if __name__ == "__main__":

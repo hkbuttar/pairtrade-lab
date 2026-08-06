@@ -38,5 +38,12 @@ space considerably):
 python -m pairs.run_basket_selection --start 2018-01-01 --end 2025-01-01
 ```
 
+Both CLI scripts print the full tested table by default (winners and
+rejects). `--only-significant` restricts what's printed to rows that passed
+FDR correction, useful once the universe gets large enough that the full
+table floods the terminal; `--output-csv <path>` saves the full table (both
+winners and rejects, independent of `--only-significant`) regardless. Shared
+in `cli_output.py`.
+
 ML-assisted candidate discovery (hierarchical clustering / PCA) on top of the
 hand-picked sector groupings in `config/universe.py` is not yet implemented.
