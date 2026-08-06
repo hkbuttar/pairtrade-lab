@@ -84,6 +84,30 @@ def test_generate_signals_does_not_flip_directly_between_long_and_short():
     assert list(positions) == [-1, -1, -1]
 
 
+def test_generate_signals_forces_flat_during_halt_and_requires_fresh_entry():
+    dates = _dates(6)
+    z = pd.Series([2.5, 1.0, 1.0, 1.0, 1.0, 2.5], index=dates)
+    monitor_status = pd.Series(
+        ["ACTIVE", "HALTED", "HALTED", "HALTED", "ACTIVE", "ACTIVE"], index=dates
+    )
+
+    positions = generate_signals(z, monitor_status=monitor_status)
+
+    # Without monitoring, holding -1 from bar 0 would persist straight
+    # through to bar 5 (z never crosses the exit/stop-loss thresholds).
+    # With monitoring, the halt forces flat, and z=1.0 at reactivation
+    # (bar 4) is below entry_threshold, so it stays flat until the fresh
+    # entry signal at bar 5.
+    assert list(positions) == [-1, 0, 0, 0, 0, -1]
+
+
+def test_generate_signals_without_monitor_status_matches_unmonitored_behavior():
+    dates = _dates(3)
+    z = pd.Series([2.5, 1.0, 1.0], index=dates)
+
+    assert list(generate_signals(z, monitor_status=None)) == [-1, -1, -1]
+
+
 def test_generate_signals_treats_leading_nan_as_flat():
     z = pd.Series([np.nan, np.nan, np.nan], index=_dates(3))
 

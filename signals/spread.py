@@ -60,6 +60,7 @@ def generate_signals(
     entry_threshold: float = DEFAULT_ENTRY_THRESHOLD,
     exit_threshold: float = DEFAULT_EXIT_THRESHOLD,
     stop_loss_threshold: float = DEFAULT_STOP_LOSS_THRESHOLD,
+    monitor_status: pd.Series | None = None,
 ) -> pd.Series:
     """Stateful entry/exit/stop-loss position series from a z-score path.
 
@@ -83,6 +84,16 @@ def generate_signals(
         stop_loss_threshold: |z| to force-close a position on continued
             divergence. Must be >= entry_threshold for the state machine
             above to make sense.
+        monitor_status: Optional per-bar "ACTIVE"/"HALTED" series (see
+            monitor.structural_break.monitor_pair_status). A HALTED bar
+            forces the position flat immediately, the same as a stop-loss,
+            and requires a fresh flat -> threshold-crossing entry signal
+            once ACTIVE resumes, rather than resuming whatever the
+            z-score-only state machine would otherwise have been doing.
+            Masking the output of an unmonitored run after the fact would
+            get this wrong: the state machine itself needs to know about
+            the halt so a stale "still notionally in a trade" state
+            doesn't reappear the instant monitoring clears.
 
     Returns:
         Position series aligned to z_score's index, values in {-1, 0, 1}.
@@ -90,7 +101,8 @@ def generate_signals(
     positions = pd.Series(0, index=z_score.index, dtype=int)
     position = 0
     for i, z in enumerate(z_score.to_numpy()):
-        if pd.isna(z):
+        active = monitor_status is None or monitor_status.iloc[i] == "ACTIVE"
+        if not active or pd.isna(z):
             position = 0
         elif position == 0:
             if z >= entry_threshold:
