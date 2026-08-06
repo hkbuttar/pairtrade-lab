@@ -29,7 +29,9 @@ Equities were chosen over crypto because same-sector cointegration (utilities, b
 
 **Multiple-comparisons correction**: testing dozens of pairs at a raw p < 0.05 threshold guarantees false positives by chance alone, so Benjamini-Hochberg FDR correction is applied across *every* pair tested in a run (`pairs.run_selection`), not per-sector. The output table shows every tested pair, both the ones that pass correction and the ones that don't, so the search space stays visible rather than only showing survivors.
 
-Johansen basket selection, static/Kalman hedge ratios, spread/signal construction, structural-break monitoring, and the block bootstrap procedure are tracked in `signals/`, `monitor/`, `backtest/`, and `risk/` and not yet implemented.
+**Basket selection: Johansen procedure** (`pairs/johansen.py`): extends the pairwise idea to 3-5 leg baskets. Johansen's test natively handles N series at once and its leading eigenvector *is* the cointegrating vector, so basket hedge weights fall out of the test itself rather than needing a follow-up regression. It also only returns critical values, not an exact p-value, so an approximate p-value (log-linear interpolation across the 90/95/99% critical values) is used to keep applying the same FDR correction as pairs; this is disclosed as an approximation, not treated as exact. Same discipline as pairs: every basket tested is reported, and FDR correction runs across the whole batch. 5-leg baskets are opt-in (not run by default) since the combinatorics grow fast; a live run over the full universe found 0/1252 3-leg baskets and 4/2930 4-leg baskets cointegrated after correction, results consistent with how few pairs (1/369) survived the same discipline.
+
+Static/Kalman hedge ratios, spread/signal construction, structural-break monitoring, and the block bootstrap procedure are tracked in `signals/`, `monitor/`, `backtest/`, and `risk/` and not yet implemented.
 
 ## Results
 Not yet available; walk-forward backtest and bootstrap comparisons come after the selection, signal, and monitoring pipeline exist.

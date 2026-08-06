@@ -19,6 +19,24 @@ can disagree.
 python -m pairs.run_selection --start 2018-01-01 --end 2025-01-01
 ```
 
-Johansen basket selection (3-5 leg baskets) and ML-assisted candidate
-discovery (hierarchical clustering / PCA) on top of the hand-picked sector
-groupings in `config/universe.py` are not yet implemented.
+`johansen.py` extends the same idea to 3-5 leg baskets via the Johansen
+procedure (`statsmodels.tsa.vector_ar.vecm.coint_johansen`), which tests
+cointegration rank across N series at once; its leading eigenvector doubles
+directly as the basket's hedge weights, no separate OLS step needed the way
+pairs need one. Since `coint_johansen` only returns critical values (90/95/99%)
+rather than an exact p-value, `johansen_test` approximates one by log-linear
+interpolation across those three points, disclosed in the module docstring as
+an approximation rather than an exact result. `test_sector_baskets` applies
+the same Benjamini-Hochberg FDR discipline as `test_sector_pairs`, across all
+baskets tested in one batch, and reports rejects alongside winners.
+
+`run_basket_selection.py` is the CLI entry point (defaults to 3- and 4-leg
+baskets; 5-leg is opt-in via `--basket-sizes` since it multiplies the search
+space considerably):
+
+```bash
+python -m pairs.run_basket_selection --start 2018-01-01 --end 2025-01-01
+```
+
+ML-assisted candidate discovery (hierarchical clustering / PCA) on top of the
+hand-picked sector groupings in `config/universe.py` is not yet implemented.
