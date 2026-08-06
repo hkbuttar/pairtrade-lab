@@ -35,7 +35,38 @@ added complexity of the Kalman filter earned its keep. Whether that holds up
 once transaction costs and realistic entry/exit rules are added (rather than
 raw tracking error) is a question for `backtest/`, once it exists.
 
-Spread construction and z-score entry/exit/stop-loss rules on top of these
-hedge ratios, and Johansen cointegrating-vector weights for baskets (already
-computed in `pairs/johansen.py`, not yet wired into a spread here), are not
-yet implemented.
+`spread.py` builds on top of the hedge ratios: `pair_spread` computes
+`y - hedge_ratio * x - intercept` (the same quantity the Engle-Granger ADF
+test was run on), accepting either a scalar or a per-bar `pd.Series` hedge
+ratio/intercept so the spread stays point-in-time correct when fed a static
+or Kalman series rather than one full-sample estimate. `basket_spread` is
+the basket analogue, a weighted sum of legs using e.g. a Johansen
+cointegrating-vector's weights. `rolling_zscore` z-scores the spread against
+its own trailing mean/std (window length an explicit, disclosed parameter).
+`generate_signals` is a stateful entry/exit/stop-loss machine (defaults
+2.0/0.5/3.5, the plan's own worked example): flat positions enter on
+`|z| >= entry_threshold`, held positions exit on `|z| <= exit_threshold`
+(reversion) or `|z| >= stop_loss_threshold` (stop-loss); positions never
+flip directly between long and short without passing through flat.
+`summarize_trades` turns a position series into a trade-by-trade table
+(side, dates, holding period, exit reason) — deliberately descriptive, not a
+P&L calculation, since entries/exits here are signal transitions with no
+transaction costs or fills modeled; real performance numbers need the
+event-driven simulator in `backtest/`, not yet built.
+
+`run_spread_signals.py` is the CLI entry point:
+
+```bash
+python -m signals.run_spread_signals --ticker-y BAC --ticker-x PNC \
+    --start 2018-01-01 --end 2025-01-01
+```
+
+**Live result on BAC/PNC**: with the Kalman hedge ratio, 77 trades over the
+full window, averaging 2.5 bars held, and *zero* stop-losses hit — every
+trade reverted cleanly. With the static hedge ratio on the same pair and
+thresholds, only 65 trades but averaging 10.6 bars held and 5 stop-losses.
+This is a coherent continuation of the Step 3 finding: a hedge ratio that
+tracks the true relationship more closely produces a spread that reverts
+faster and more reliably, while a stale periodically-refit hedge ratio lets
+the spread wander further before reverting (or blowing through the
+stop-loss instead).
