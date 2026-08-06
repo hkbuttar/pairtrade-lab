@@ -37,13 +37,19 @@ Equities were chosen over crypto because same-sector cointegration (utilities, b
 
 **Spread construction and entry/exit/stop-loss signals** (`signals/spread.py`): the spread is `y - hedge_ratio * x - intercept` (the same quantity the ADF test was run on), accepting a per-bar hedge ratio/intercept series so it stays point-in-time correct rather than using one full-sample estimate; z-scored against its own trailing rolling mean/std (window an explicit, disclosed parameter). Entry/exit/stop-loss is a stateful machine with the plan's own worked thresholds (2.0/0.5/3.5) as defaults: enter on `|z| >= entry_threshold`, exit on reversion (`|z| <= exit_threshold`) or stop-loss (`|z| >= stop_loss_threshold`); positions never flip directly between long and short without passing through flat. Live result on BAC/PNC, descriptive only (no P&L, transaction costs, or fills modeled yet, that needs `backtest/`): with the Kalman hedge ratio, 77 trades averaging 2.5 bars held with zero stop-losses; with the static hedge ratio on the same thresholds, only 65 trades but averaging 10.6 bars held and 5 stop-losses. A coherent continuation of the hedge-ratio finding above: better tracking produces a spread that reverts faster and more reliably, while a stale periodically-refit hedge ratio lets it wander further before reverting or blowing through the stop-loss.
 
-Structural-break monitoring and the block bootstrap procedure are tracked in `monitor/`, `backtest/`, and `risk/` and not yet implemented.
+**Structural-break monitoring: rolling re-test + CUSUM** (`monitor/structural_break.py`): the Engle-Granger test is re-run on a trailing window at every new bar (not just at fixed refit points), and Page's (1954) CUSUM control chart watches the spread's rolling z-score for a *sustained* directional drift, a faster and more principled signal than waiting for one large excursion. A pair is HALTED the instant either signal fires and only reinstated after a sustained run of qualifying bars, a disclosed simplification of full re-entry through the batch FDR pipeline. The live finding here is the most important one in the project so far: BAC/PNC, the only pair to survive full-sample FDR correction (raw p=0.00004), was HALTED for **86% of the 2018-2025 window** under continuous 90-day rolling re-testing, with individual halts as long as 632 calendar days. Checked across rolling windows from 90 to 252 days, the halted fraction only falls from 86% to 70%, so this is not a short-window artifact. Full-sample cointegration significance is not the same claim as "the relationship holds throughout the sample," and that gap is exactly what this monitoring exists to catch.
+
+The block bootstrap procedure is tracked in `backtest/` and `risk/` and not yet implemented.
 
 ## Results
-Not yet available; walk-forward backtest and bootstrap comparisons come after the selection, signal, and monitoring pipeline exist.
+Not yet available; walk-forward backtest and bootstrap comparisons come after the full pipeline exists.
 
 ## Limitations
-See Data above for data-layer limitations. Methodology-level limitations (cointegration can still break unpredictably even with monitoring, thin spreads are transaction-cost-sensitive, basket complexity-vs-benefit tradeoff, ML-discovered pairs may lack economic rationale even if statistically valid) will be documented here as each piece lands.
+See Data above for data-layer limitations. Methodology-level limitations disclosed so far:
+- Cointegration can still break down unpredictably even with monitoring in place: the monitor detects a break after it's underway, it doesn't prevent one.
+- The one pair that survived selection spent the large majority of the historical window HALTED under rolling re-testing (see Methodology above), which raises a real question about how much tradable time a strategy built on hand-picked-sector, full-sample-significant pairs would actually get, one `backtest/` will need to answer directly rather than assume away.
+- Thin spreads are transaction-cost-sensitive; not yet modeled (no `backtest/`).
+- Basket complexity-vs-benefit tradeoff and whether ML-discovered pairs lack economic rationale even if statistically valid: not yet resolved, since so far ML clustering has mostly just reproduced the hand-picked sectors on this universe.
 
 ## Future Work
 Capacity/transaction-cost-scaling analysis reusing execedge's impact modeling, live paper-trading extension consistent with alpha-signal-lab, regime-switching models.
