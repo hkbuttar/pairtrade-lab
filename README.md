@@ -22,7 +22,14 @@ Equities were chosen over crypto because same-sector cointegration (utilities, b
 - Caching is local parquet under `data/cache/prices/` (gitignored), not versioned, so results are only exactly reproducible on a machine that has re-pulled the same date range from the same source.
 
 ## Methodology
-See `pairs/`, `signals/`, `monitor/`, `backtest/`, and `risk/` (in progress) for cointegration/basket selection with FDR correction, static vs. dynamic hedge ratios, spread/signal construction, structural-break monitoring, and the block bootstrap procedure, as each is built out.
+
+**Pair selection: correlation vs. cointegration.** Two assets can be highly correlated in *returns* while never being cointegrated in *price levels*, and vice versa: a pair can have near-zero return correlation yet still share a common stochastic trend that pulls their prices back together. Correlation is about co-movement day to day; cointegration is about whether a linear combination of the price *levels* is stationary, i.e. mean-reverting. Pairs trading needs the latter, since a correlated-but-not-cointegrated spread has no statistical reason to revert. `pairs/cointegration.py` reports both on every tested pair so the two are never conflated.
+
+**Engle-Granger two-step test** (`pairs/cointegration.py`): for each within-sector candidate pair, OLS-regress one price series on the other to get a hedge ratio, then run an Augmented Dickey-Fuller test on the regression residuals. The test isn't symmetric (regressing A on B can give a different p-value than B on A), so each pair is tested in one fixed, canonical direction (alphabetical) rather than both directions with the better p-value kept, which would be a form of data snooping.
+
+**Multiple-comparisons correction**: testing dozens of pairs at a raw p < 0.05 threshold guarantees false positives by chance alone, so Benjamini-Hochberg FDR correction is applied across *every* pair tested in a run (`pairs.run_selection`), not per-sector. The output table shows every tested pair, both the ones that pass correction and the ones that don't, so the search space stays visible rather than only showing survivors.
+
+Johansen basket selection, static/Kalman hedge ratios, spread/signal construction, structural-break monitoring, and the block bootstrap procedure are tracked in `signals/`, `monitor/`, `backtest/`, and `risk/` and not yet implemented.
 
 ## Results
 Not yet available; walk-forward backtest and bootstrap comparisons come after the selection, signal, and monitoring pipeline exist.
