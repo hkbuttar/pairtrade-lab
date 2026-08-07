@@ -1,0 +1,167 @@
+{
+  "start": "2018-01-01",
+  "end": "2025-01-01",
+  "block_length": 20,
+  "n_resamples": 2000,
+  "seed": 42,
+  "baseline": {
+    "label": "Baseline (Kalman, proactive monitoring, hand-picked sectors)",
+    "metrics": {
+      "cagr": -0.009401678445080663,
+      "sharpe_ratio": -0.6914609728447622,
+      "sortino_ratio": -0.14179132614324175,
+      "max_drawdown": 0.06564728840314715,
+      "win_rate": 0.013075611142694713,
+      "n_trades": 17,
+      "avg_bars_held": 2.0,
+      "stop_loss_rate": 0.0
+    },
+    "ci": {
+      "cagr": {
+        "ci_low": -0.019572657945177905,
+        "ci_high": -0.0016054982370313866,
+        "point_estimate": -0.009401678445080663
+      },
+      "sharpe_ratio": {
+        "ci_low": -1.1188643624316992,
+        "ci_high": -0.18414429264290347,
+        "point_estimate": -0.6914609728447622
+      },
+      "sortino_ratio": {
+        "ci_low": -0.26093774503315076,
+        "ci_high": -0.03681244572650869,
+        "point_estimate": -0.14179132614324175
+      },
+      "max_drawdown": {
+        "ci_low": 0.022442366421443767,
+        "ci_high": 0.1347527901449544,
+        "point_estimate": 0.06564728840314726
+      },
+      "win_rate": {
+        "ci_low": 0.00511654349061967,
+        "ci_high": 0.022171688459351906,
+        "point_estimate": 0.013075611142694713
+      }
+    }
+  },
+  "static_hedge_ratio": {
+    "label": "Static hedge ratio",
+    "metrics": {
+      "cagr": 0.0014752395318649025,
+      "sharpe_ratio": 0.2772435856550999,
+      "sortino_ratio": 0.11979459006843468,
+      "max_drawdown": 0.00793502025916426,
+      "win_rate": 0.003979533826037522,
+      "n_trades": 4,
+      "avg_bars_held": 1.5,
+      "stop_loss_rate": 0.0
+    },
+    "ci": {
+      "cagr": {
+        "ci_low": -0.0013575879492200293,
+        "ci_high": 0.005847612526040004,
+        "point_estimate": 0.0014752395318649025
+      },
+      "sharpe_ratio": {
+        "ci_low": -0.3229882604692893,
+        "ci_high": 0.754053986528584,
+        "point_estimate": 0.2772435856550999
+      },
+      "sortino_ratio": {
+        "ci_low": -0.14948991478948315,
+        "ci_high": 0.5130414168673352,
+        "point_estimate": 0.11979459006843468
+      },
+      "max_drawdown": {
+        "ci_low": 0.0,
+        "ci_high": 0.015446878244420259,
+        "point_estimate": 0.00793502025916426
+      },
+      "win_rate": {
+        "ci_low": 0.0005685048322910744,
+        "ci_high": 0.007959067652075043,
+        "point_estimate": 0.003979533826037522
+      }
+    }
+  },
+  "reactive_only": {
+    "label": "Reactive-only (no structural-break monitoring)",
+    "metrics": {
+      "cagr": -0.022075111986677665,
+      "sharpe_ratio": -0.8206806339632432,
+      "sortino_ratio": -0.26828775671015864,
+      "max_drawdown": 0.15124637643573435,
+      "win_rate": 0.05173393973848778,
+      "n_trades": 59,
+      "avg_bars_held": 10.474576271186441,
+      "stop_loss_rate": 0.0
+    },
+    "ci": {
+      "cagr": {
+        "ci_low": -0.0443816577403399,
+        "ci_high": -0.005394281022274807,
+        "point_estimate": -0.022075111986677887
+      },
+      "sharpe_ratio": {
+        "ci_low": -1.2609932843741603,
+        "ci_high": -0.27862699061183416,
+        "point_estimate": -0.8206806339632432
+      },
+      "sortino_ratio": {
+        "ci_low": -0.48352022326524774,
+        "ci_high": -0.09938248307855818,
+        "point_estimate": -0.26828775671015864
+      },
+      "max_drawdown": {
+        "ci_low": 0.057242486509233845,
+        "ci_high": 0.2773950485453203,
+        "point_estimate": 0.15124637643573557
+      },
+      "win_rate": {
+        "ci_low": 0.031836270608300174,
+        "ci_high": 0.07390562819783968,
+        "point_estimate": 0.05173393973848778
+      }
+    }
+  },
+  "ml_clusters": {
+    "label": "ML-discovered clusters instead of hand-picked sectors",
+    "metrics": {
+      "cagr": -0.0035040536080477303,
+      "sharpe_ratio": -0.4991182397906045,
+      "sortino_ratio": -0.08230976742284567,
+      "max_drawdown": 0.027210462149370174,
+      "win_rate": 0.007959067652075043,
+      "n_trades": 8,
+      "avg_bars_held": 2.5,
+      "stop_loss_rate": 0.0
+    },
+    "ci": {
+      "cagr": {
+        "ci_low": -0.00839218830870207,
+        "ci_high": 0.000730449440767833,
+        "point_estimate": -0.0035040536080477303
+      },
+      "sharpe_ratio": {
+        "ci_low": -0.9815700412320528,
+        "ci_high": 0.161131603345467,
+        "point_estimate": -0.4991182397906045
+      },
+      "sortino_ratio": {
+        "ci_low": -0.20312838041599623,
+        "ci_high": 0.027798942300876858,
+        "point_estimate": -0.08230976742284567
+      },
+      "max_drawdown": {
+        "ci_low": 0.006011044123072335,
+        "ci_high": 0.060512676567756316,
+        "point_estimate": 0.02721046214936995
+      },
+      "win_rate": {
+        "ci_low": 0.0022740193291642978,
+        "ci_high": 0.015349630471859011,
+        "point_estimate": 0.007959067652075043
+      }
+    }
+  }
+}

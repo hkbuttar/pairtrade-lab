@@ -33,6 +33,7 @@ doesn't exist.
 from __future__ import annotations
 
 import argparse
+import json
 
 import pandas as pd
 
@@ -43,12 +44,16 @@ from data.prices import load_prices, to_price_panel
 from pairs.clustering import cluster_tickers
 
 
-def _run_and_bootstrap(label: str, block_length: int, n_resamples: int, **kwargs) -> dict:
+def _run_and_bootstrap(
+    label: str, block_length: int, n_resamples: int, seed: int | None, **kwargs
+) -> dict:
     print(f"Running: {label}...")
     result = run_backtest(**kwargs)
     returns = result["equity_curve"].pct_change()
     try:
-        ci = bootstrap_backtest_metrics(returns, block_length=block_length, n_resamples=n_resamples)
+        ci = bootstrap_backtest_metrics(
+            returns, block_length=block_length, n_resamples=n_resamples, seed=seed
+        )
     except ValueError:
         ci = None
     return {"label": label, "result": result, "ci": ci}
@@ -81,6 +86,23 @@ def _ml_clusters_before(start: str, source: str, n_clusters: int) -> dict[str, l
     return cluster_tickers(panel, n_clusters=n_clusters)
 
 
+def _serialize_run(run: dict) -> dict:
+    metrics = run["result"]["metrics"]
+    ci = run["ci"]
+    return {
+        "label": run["label"],
+        "metrics": metrics,
+        "ci": (
+            {
+                name: {"ci_low": r.ci_low, "ci_high": r.ci_high, "point_estimate": r.point_estimate}
+                for name, r in ci.items()
+            }
+            if ci
+            else None
+        ),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start", required=True)
@@ -89,6 +111,12 @@ def main() -> None:
     parser.add_argument("--block-length", type=int, default=20)
     parser.add_argument("--n-resamples", type=int, default=2000)
     parser.add_argument("--n-clusters", type=int, default=12)
+    parser.add_argument(
+        "--seed", type=int, default=None, help="Bootstrap seed, for reproducibility"
+    )
+    parser.add_argument(
+        "--output-json", default=None, help="Path to save all results + CIs as JSON"
+    )
     args = parser.parse_args()
 
     common = dict(start=args.start, end=args.end, price_source=args.source)
@@ -97,12 +125,14 @@ def main() -> None:
         "Baseline (Kalman, proactive monitoring, hand-picked sectors)",
         args.block_length,
         args.n_resamples,
+        args.seed,
         **common,
     )
     static_variant = _run_and_bootstrap(
         "Static hedge ratio",
         args.block_length,
         args.n_resamples,
+        args.seed,
         **common,
         hedge_ratio_method="static",
     )
@@ -110,6 +140,7 @@ def main() -> None:
         "Reactive-only (no structural-break monitoring)",
         args.block_length,
         args.n_resamples,
+        args.seed,
         **common,
         use_monitor=False,
     )
@@ -119,9 +150,26 @@ def main() -> None:
         "ML-discovered clusters instead of hand-picked sectors",
         args.block_length,
         args.n_resamples,
+        args.seed,
         **common,
         sector_tickers=ml_clusters,
     )
+
+    if args.output_json:
+        payload = {
+            "start": args.start,
+            "end": args.end,
+            "block_length": args.block_length,
+            "n_resamples": args.n_resamples,
+            "seed": args.seed,
+            "baseline": _serialize_run(baseline),
+            "static_hedge_ratio": _serialize_run(static_variant),
+            "reactive_only": _serialize_run(reactive_variant),
+            "ml_clusters": _serialize_run(ml_variant),
+        }
+        with open(args.output_json, "w") as f:
+            json.dump(payload, f, indent=2, default=str)
+        print(f"Saved comparison results to {args.output_json}\n")
 
     print(f"\n=== Baseline ===\nn_trades={baseline['result']['metrics']['n_trades']}")
     for name in ("cagr", "sharpe_ratio", "max_drawdown", "win_rate"):

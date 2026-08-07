@@ -110,6 +110,18 @@ changing exactly one dimension, with block bootstrap CIs on each:
 python -m backtest.run_comparison --start 2018-01-01 --end 2025-01-01
 ```
 
+**Results, 2018-2025** (95% CIs, 2000 resamples, 20-day blocks):
+
+| Metric | Baseline (Kalman, proactive, hand-picked) | Static hedge ratio | Reactive-only | ML clusters |
+|---|---|---|---|---|
+| CAGR | -0.94% `[-1.94%, -0.20%]` | **+0.15%** `[-0.15%, 0.57%]` | -2.21% `[-4.42%, -0.50%]` | -0.35% `[-0.87%, 0.07%]` |
+| Sharpe | -0.69 `[-1.12, -0.21]` | 0.28 `[-0.34, 0.72]` | -0.82 `[-1.27, -0.26]` | -0.50 `[-1.00, 0.15]` |
+| Max drawdown | 6.6% `[2.2%, 13.4%]` | **0.8%** `[0.0%, 1.6%]` | 15.1% `[5.1%, 27.9%]` | 2.7% `[0.7%, 6.2%]` |
+| Win rate | 1.31% `[0.51%, 2.27%]` | 0.40% `[0.06%, 0.85%]` | **5.17%** `[3.07%, 7.39%]` | 0.80% `[0.23%, 1.59%]` |
+| n_trades | 17 | 4 | 59 | 8 |
+
+Bold = CI distinguishable from the baseline's (no overlap). `run_comparison.py` doesn't fix a bootstrap seed by default, so exact digits shift slightly (±0.01-0.05 typical) between runs on the same data; the pattern of which comparisons are distinguishable vs. overlapping has been stable across reruns and is what should be trusted, not any single run's decimal places.
+
 **Static vs. Kalman hedge ratio.** This one complicates the earlier,
 single-pair finding rather than confirming it. On BAC/PNC in isolation
 (`signals/README.md`), Kalman had 65-84% lower one-step-ahead tracking
