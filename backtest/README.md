@@ -100,3 +100,59 @@ excuses for the result:
   this scale (see `risk/README.md`): a 6.6% max drawdown is well under the
   15% default kill-switch threshold. That's the risk layer behaving
   correctly as a backstop, not evidence it did anything here.
+
+## Honest comparisons
+
+`run_comparison.py` runs the baseline above against three variants, each
+changing exactly one dimension, with block bootstrap CIs on each:
+
+```bash
+python -m backtest.run_comparison --start 2018-01-01 --end 2025-01-01
+```
+
+**Static vs. Kalman hedge ratio.** This one complicates the earlier,
+single-pair finding rather than confirming it. On BAC/PNC in isolation
+(`signals/README.md`), Kalman had 65-84% lower one-step-ahead tracking
+error and produced cleaner, faster-reverting trades with zero stop-losses.
+In the full walk-forward backtest, trading whichever pairs actually get
+selected over time (not just BAC/PNC) with real transaction costs: static
+produced *better* CAGR (+0.15% vs. -0.94%, CIs distinguishable, not
+overlapping) and a smaller max drawdown (0.8% vs. 6.6%, also
+distinguishable), from far fewer trades (4 vs. 17). Sharpe and win rate
+were *not* distinguishably different (CIs overlap). The honest read: Kalman
+tracks the relationship better and trades more often as a result, but that
+extra trading frequency didn't pay for itself once transaction costs and
+walk-forward pair rotation entered the picture on this universe and window.
+The isolated single-pair diagnostic in `signals/` was correct as far as it
+went (Kalman really does track better); it just wasn't the full story once
+embedded in the whole system, which is exactly why this system-level
+comparison exists rather than stopping at the earlier finding.
+
+**Reactive-only vs. proactive structural-break monitoring.** Proactive
+monitoring produced fewer trades (17 vs. 59), a better point-estimate CAGR
+(-0.94% vs. -2.21%) and Sharpe (-0.69 vs. -0.82), but none of those
+differences are statistically distinguishable at 95% (CIs overlap on CAGR,
+Sharpe, and max drawdown). Win rate *is* distinguishable (1.3% vs. 5.2%),
+but that's a metric artifact, not a performance signal: win rate here is
+computed over every calendar day, and reactive-only is in a position far
+more often (59 vs. 17 trades), mechanically raising the day-level win rate
+regardless of whether the strategy actually did better. Honest answer:
+proactive monitoring points the right direction (fewer, more selective
+trades; better point estimates) but this backtest's sample isn't large
+enough to call the difference statistically real yet, a genuine "no
+confirmed meaningful difference" rather than a confirmed win.
+
+**Hand-picked sectors vs. ML-discovered clusters.** Every metric's CI
+overlaps between the two (CAGR, Sharpe, max drawdown, win rate all "no
+meaningful difference"). Consistent with `pairs/clustering.py`'s own
+selection-stage finding: on this universe, ML clustering mostly just
+reproduces the hand-picked sector groupings, so it isn't surprising the
+resulting trades and performance don't differ meaningfully either.
+
+**Pairs vs. baskets.** Not run: baskets aren't wired into the event-driven
+backtest (see "Not yet included" above). The best available evidence is
+`pairs/johansen.py`'s own selection-stage result (0/1252 3-leg and 4/2930
+4-leg baskets significant after FDR correction, comparably rare to the
+1/369 pairs that survived the same discipline) rather than a fabricated
+backtest number. A basket backtest would face at least as severe a
+small-sample problem as the pairs backtest above, likely worse.

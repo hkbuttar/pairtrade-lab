@@ -53,6 +53,13 @@ Equities were chosen over crypto because same-sector cointegration (utilities, b
 
 This is a plain "no, it doesn't (yet) work" result, reported as exactly that, consistent with this portfolio's established pattern (alpha-signal-lab's kill-switch finding, Terra Risk's counterintuitive flood result). It should still be read cautiously: 17 trades over 7 years is a very small sample, and a block bootstrap can't manufacture information that was never in the original 7-year window; a materially longer backtest would be worth more than a wider resampling budget on this same data. The reported win rate (1.3%) is also easy to misread: it's computed over every calendar day including the large majority spent flat (since so few pairs are tradable at once in this universe), not a per-trade win rate; the trade log itself shows 14 of 17 trades exiting on clean reversion.
 
+**Honest comparisons** (`backtest/run_comparison.py`), each varying exactly one dimension from the baseline above, with bootstrap CIs on both sides:
+
+- **Static vs. Kalman hedge ratio**: complicates rather than confirms the earlier single-pair finding. On BAC/PNC in isolation, Kalman tracked better and traded more cleanly (see above). In the full walk-forward backtest across whichever pairs actually got selected over time, static produced a *better* CAGR (+0.15% vs. -0.94%, CIs distinguishable) and smaller drawdown (0.8% vs. 6.6%, distinguishable) from far fewer trades (4 vs. 17); Sharpe and win rate were not distinguishably different. Kalman's better tracking led to more frequent trading, and that extra frequency didn't pay for itself once transaction costs and walk-forward pair rotation were in the picture, on this universe and window.
+- **Reactive-only vs. proactive structural-break monitoring**: proactive produced fewer trades (17 vs. 59) and better point estimates (CAGR -0.94% vs. -2.21%, Sharpe -0.69 vs. -0.82), but neither difference is statistically distinguishable at 95%. Win rate is distinguishable (1.3% vs. 5.2%) but that's the same day-level metric artifact noted above, not a real performance signal. Honest answer: proactive monitoring points the right direction but this sample can't yet confirm the difference is real.
+- **Hand-picked sectors vs. ML-discovered clusters**: every metric's CI overlaps; no meaningful difference, consistent with clustering mostly reproducing the sectors on this universe (see Methodology above).
+- **Pairs vs. baskets**: not run; baskets aren't wired into the backtest. Best available evidence is the selection-stage rarity already reported above (0-4 significant baskets out of thousands tested), not a fabricated backtest number.
+
 ## Limitations
 See Data above for data-layer limitations. Methodology-level limitations disclosed so far:
 - Cointegration can still break down unpredictably even with monitoring in place: the monitor detects a break after it's underway, it doesn't prevent one.
@@ -60,6 +67,7 @@ See Data above for data-layer limitations. Methodology-level limitations disclos
 - Thin spreads are transaction-cost-sensitive, but costs turned out not to be the main driver of the negative backtest result above; the underlying signal itself is the bigger problem on this universe and window.
 - The risk layer (kill-switch, position limits) exists now but never actually bound in the live result: it's a backstop against a much worse outcome than the one observed, not something validated by this particular run.
 - The block bootstrap quantifies uncertainty from resampling the *existing* 7-year sample; it says nothing about regimes or relationships outside that window, and `block_length` (20 days) is a disclosed, unfitted choice, not tuned to this data.
+- The static-vs-Kalman comparison flipped direction between the isolated single-pair diagnostic and the full walk-forward backtest: a component-level finding is not automatically the system-level answer, and the comparisons above should be trusted over the earlier isolated ones where they conflict.
 - Basket complexity-vs-benefit tradeoff and whether ML-discovered pairs lack economic rationale even if statistically valid: not yet resolved, since so far ML clustering has mostly just reproduced the hand-picked sectors on this universe, and baskets aren't in the backtest yet.
 
 ## Future Work

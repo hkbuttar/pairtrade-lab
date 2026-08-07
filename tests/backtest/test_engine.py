@@ -124,3 +124,10 @@ def test_zero_notional_limit_suppresses_all_entries():
     result = _run(max_notional_per_pair_fraction=0.0, max_gross_exposure_fraction=0.0)
 
     assert result["trades"].empty
+
+
+def test_use_monitor_false_never_produces_halted_exits():
+    result = _run(use_monitor=False)
+
+    trades = result["trades"]
+    assert "halted" not in set(trades["exit_reason"])

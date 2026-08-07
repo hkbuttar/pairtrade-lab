@@ -46,6 +46,14 @@ level risk.kill_switch.KillSwitch checks equity every bar; once triggered
 (sticky, no auto-resume) every open position is flattened and no further
 selection or signal processing happens for the rest of the run, the same
 manual-reset-only design used across this portfolio's other backtesters.
+
+``use_monitor`` (default True) toggles the proactive structural-break
+detection (monitor.structural_break's rolling re-test + CUSUM) on or off,
+for the Step 9 comparison against a reactive-only strategy that relies
+purely on the z-score's own stop_loss_threshold to catch a diverging
+relationship. False disables the rolling re-test/CUSUM computation entirely
+(not just their effect) and pins each pair's monitor status to a constant
+ACTIVE, so it can only ever exit via reversion or stop-loss.
 """
 
 from __future__ import annotations
@@ -100,6 +108,7 @@ def _compute_pair_series(
     cusum_h: float,
     pvalue_threshold: float,
     requalify_bars: int,
+    use_monitor: bool = True,
 ) -> dict:
     y = close_panel.loc[tenure_start:window_end, ticker_y]
     x = close_panel.loc[tenure_start:window_end, ticker_x]
@@ -111,16 +120,26 @@ def _compute_pair_series(
 
     spread = pair_spread(y, x, estimate["hedge_ratio"], estimate["intercept"])
     zscore = rolling_zscore(spread, window=zscore_window)
-    rolling_pvalue = rolling_cointegration_pvalue(
-        y, x, window=rolling_cointegration_window, step=rolling_cointegration_step
-    )
-    cusum = cusum_detect(zscore, k=cusum_k, h=cusum_h)
-    monitor_status = monitor_pair_status(
-        rolling_pvalue,
-        cusum["break_flagged"],
-        pvalue_threshold=pvalue_threshold,
-        requalify_bars=requalify_bars,
-    )
+
+    if use_monitor:
+        rolling_pvalue = rolling_cointegration_pvalue(
+            y, x, window=rolling_cointegration_window, step=rolling_cointegration_step
+        )
+        cusum = cusum_detect(zscore, k=cusum_k, h=cusum_h)
+        monitor_status = monitor_pair_status(
+            rolling_pvalue,
+            cusum["break_flagged"],
+            pvalue_threshold=pvalue_threshold,
+            requalify_bars=requalify_bars,
+        )
+    else:
+        # Reactive-only mode (Step 9's comparison point): no proactive
+        # rolling re-test or CUSUM detection, so a divergence is only ever
+        # caught by the z-score's own stop_loss_threshold. Kept as a
+        # constant-ACTIVE series (not None/skipped) so downstream exit-
+        # reason classification doesn't need a separate code path.
+        monitor_status = pd.Series("ACTIVE", index=zscore.index)
+
     positions = generate_signals(
         zscore, entry_threshold, exit_threshold, stop_loss_threshold, monitor_status=monitor_status
     )
@@ -159,6 +178,7 @@ def _run_backtest_on_panel(
     max_notional_per_pair_fraction: float = 0.5,
     max_gross_exposure_fraction: float = 1.0,
     kill_switch_drawdown: float = 0.15,
+    use_monitor: bool = True,
 ) -> dict:
     trading_dates = close_panel.index[
         (close_panel.index >= pd.Timestamp(start)) & (close_panel.index < pd.Timestamp(end))
@@ -227,6 +247,7 @@ def _run_backtest_on_panel(
                         cusum_h,
                         pvalue_threshold,
                         requalify_bars,
+                        use_monitor,
                     )
                 except ValueError:
                     # Not enough observations yet in this tenure (e.g. a pair
@@ -379,7 +400,7 @@ def run_backtest(
             stop_loss thresholds, rolling_cointegration_window/step, cusum_k/
             h, pvalue_threshold, requalify_bars, fdr_alpha, cost_bps,
             starting_cash, notional_per_pair, max_notional_per_pair_fraction,
-            max_gross_exposure_fraction, kill_switch_drawdown).
+            max_gross_exposure_fraction, kill_switch_drawdown, use_monitor).
 
     Returns:
         Dict with "equity_curve" (pd.Series), "trades" (pd.DataFrame),
