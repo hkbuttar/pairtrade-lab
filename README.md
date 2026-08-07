@@ -1,6 +1,8 @@
 # PairTrade Lab — Statistical Arbitrage & Pairs Trading
 Statistical arbitrage backtester for pairs and basket trading. Cointegration testing, Kalman-filter dynamic hedge ratios, and mean-reversion spread trading on real US equities data, with walk-forward validation and honest reporting of what actually holds out-of-sample. CPU-only.
 
+**Live demo:** [pairtrade-lab.onrender.com](https://pairtrade-lab.onrender.com) — free-tier Render service, spins down after ~15 min idle, so the first load after a while may take 30-60s to wake up.
+
 ## Motivation
 Every other project in this portfolio trades directionally: cross-sectional factors (alpha-signal-lab), market-making (bookmaker), execution (execedge), all bet on absolute price movement or liquidity provision. Statistical arbitrage is fundamentally different: it bets on the *relationship* between assets reverting to historical norms, market-neutral by construction. This project builds that from scratch, with the same discipline as the rest of the portfolio: real data, walk-forward validation, disclosed modeling assumptions, and honest reporting when something doesn't work.
 
