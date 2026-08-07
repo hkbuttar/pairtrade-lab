@@ -64,6 +64,14 @@ This is a plain "no, it doesn't (yet) work" result, reported as exactly that, co
 
 `frontend/app.py` is a Panel dashboard, the third distinct Python dashboard paradigm across this portfolio's projects: alpha-signal-lab uses Streamlit's script-rerun model, bookmaker/execedge use raw Bokeh servers with periodic database-polling callbacks, and this project uses Panel's `param.Parameterized` widgets driving recomputation reactively on change. Panel wraps Bokeh plots directly (`pn.pane.Bokeh`), reusing this portfolio's existing Bokeh plotting fluency for the actual charts, and runs on Bokeh's server under the hood (`panel serve`) for genuine push updates rather than polling. Four tabs: live monitoring status per FDR-significant pair, a spread/z-score chart with entry/exit markers and shaded HALTED regions (selectable by pair), the Step 9 comparison bar charts with CI whiskers, and a structural-break alert feed. There's no live paper-trading scheduler in this project yet (see Future Work), so every "live" view is recomputed against the latest cached price data on interaction, not a continuous feed, disclosed as exactly that rather than implied otherwise. Run with `panel serve frontend/app.py --show`; see `frontend/README.md` for the full breakdown.
 
+## Backend (optional)
+
+`backend/main.py` is a thin, optional FastAPI layer over the same `frontend/data_access.py` functions the dashboard uses (health check, significant pairs, per-pair status/alerts, the comparison snapshot) — for programmatic access, not a requirement. It's deliberately **not part of the Render deployment**: Panel already serves its own frontend and there's no separate JS client that needs a JSON API, so the single deployed service is Panel alone. Run locally with `uvicorn backend.main:app --reload`; see `backend/README.md`.
+
+## Deployment
+
+`render.yaml`: a single Render web service running `panel serve frontend/app.py --port $PORT --address 0.0.0.0 --allow-websocket-origin=$RENDER_EXTERNAL_HOSTNAME --use-xheaders`. The `--allow-websocket-origin` flag is an easy-to-miss requirement: Bokeh (which Panel runs on) rejects cross-origin websocket upgrades by default, and without it the deployed app just looks stuck "loading" forever with no obvious error. `RENDER_EXTERNAL_HOSTNAME` is auto-injected by Render on every web service, so the flag doesn't need a hardcoded URL known before the first deploy. No database and no second service, consistent with this project's single-service plan.
+
 ## Limitations
 See Data above for data-layer limitations. Methodology-level limitations disclosed so far:
 - Cointegration can still break down unpredictably even with monitoring in place: the monitor detects a break after it's underway, it doesn't prevent one.

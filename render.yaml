@@ -1,0 +1,32 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+#
+# Single web service, per the project plan: Panel serves its own frontend
+# (frontend/app.py), there's no separate JS client, and this project has
+# no database (price data is cached parquet, computed on demand), so
+# there's nothing for a second service to own that this one doesn't
+# already have. backend/main.py's FastAPI layer is intentionally NOT
+# deployed here (see backend/README.md): it's for local/programmatic use,
+# not part of this single-service deployment.
+#
+# --allow-websocket-origin: Bokeh (which Panel runs on top of) rejects
+# cross-origin websocket upgrades by default; RENDER_EXTERNAL_HOSTNAME is
+# auto-injected by Render for every web service, so this doesn't need to
+# be typed in by hand or known before the first deploy. Easy to miss and
+# the app will look like it's stuck "loading" forever without it.
+# --use-xheaders: trust the X-Forwarded-* headers Render's proxy sets, so
+# Panel/Bokeh see the real client scheme/host instead of the internal
+# proxy connection (needed for the websocket-origin check above to see
+# the right host).
+services:
+  - type: web
+    name: pairtrade-lab
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: >-
+      panel serve frontend/app.py --port $PORT --address 0.0.0.0
+      --allow-websocket-origin=$RENDER_EXTERNAL_HOSTNAME --use-xheaders
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
