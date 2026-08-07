@@ -2,6 +2,7 @@
 
 Usage:
     python -m backtest.run_backtest --start 2018-01-01 --end 2025-01-01
+    python -m backtest.run_backtest --start 2018-01-01 --end 2025-01-01 --bootstrap
 
 Walk-forward: pair selection and hedge ratio estimation are re-run at each
 refit date using only data available strictly before that date; the
@@ -9,12 +10,18 @@ resulting pairs are traded purely out-of-sample until the next refit.
 Structural-break monitoring (monitor/) runs throughout and forces a flat
 position whenever a pair is HALTED. See backtest/engine.py for the full
 mechanics and backtest/README.md for a live result and its honest caveats.
+
+--bootstrap adds block-bootstrap confidence intervals (backtest/bootstrap.py)
+on top of the point-estimate metrics, since with as few trades as this
+strategy tends to produce, a bare point estimate (e.g. "Sharpe -0.69") is
+easy to overread as more precise than it is.
 """
 
 from __future__ import annotations
 
 import argparse
 
+from backtest.bootstrap import bootstrap_backtest_metrics
 from backtest.engine import run_backtest
 
 
@@ -38,6 +45,12 @@ def main() -> None:
     parser.add_argument("--max-notional-per-pair-fraction", type=float, default=0.5)
     parser.add_argument("--max-gross-exposure-fraction", type=float, default=1.0)
     parser.add_argument("--kill-switch-drawdown", type=float, default=0.15)
+    parser.add_argument(
+        "--bootstrap", action="store_true", help="Add block-bootstrap CIs on the headline metrics"
+    )
+    parser.add_argument("--block-length", type=int, default=20)
+    parser.add_argument("--n-resamples", type=int, default=2000)
+    parser.add_argument("--confidence-level", type=float, default=0.95)
     args = parser.parse_args()
 
     result = run_backtest(
@@ -73,6 +86,25 @@ def main() -> None:
     for key, value in result["metrics"].items():
         print(f"  {key}: {value:.4f}" if value == value else f"  {key}: nan")
     print(f"  kill_switch_triggered: {result['kill_switch_triggered']}")
+
+    if args.bootstrap:
+        returns = result["equity_curve"].pct_change()
+        try:
+            bootstrapped = bootstrap_backtest_metrics(
+                returns,
+                block_length=args.block_length,
+                n_resamples=args.n_resamples,
+                confidence_level=args.confidence_level,
+            )
+        except ValueError as e:
+            print(f"\nBootstrap skipped: {e}")
+            return
+
+        pct = int(args.confidence_level * 100)
+        print(f"\nBlock bootstrap {pct}% CIs (block_length={args.block_length}, "
+              f"n_resamples={args.n_resamples}):")
+        for name, r in bootstrapped.items():
+            print(f"  {name}: {r.point_estimate:.4f}  [{r.ci_low:.4f}, {r.ci_high:.4f}]")
 
 
 if __name__ == "__main__":
